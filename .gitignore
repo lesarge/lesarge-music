@@ -19,3 +19,13 @@ ckpt/
 datasets/
 .blob_storage/
 Cache/
+
+# heavy/generated inside subprojects
+ace-step-ui/audiomass-editor/
+ace-step-ui/wavacity-editor/
+ace-step-ui/server/data/
+ace-step-ui/server/public/audio/
+ace-step-ui/server/public/uploads/
+*.db
+*.db-shm
+*.db-wal
