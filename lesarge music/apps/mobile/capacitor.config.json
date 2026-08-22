@@ -1,0 +1,9 @@
+{
+  "appId": "ch.lesarge.music.ai.mobile",
+  "appName": "Lesarge Music AI",
+  "webDir": "web",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#09090b"
+  }
+}

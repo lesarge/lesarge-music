@@ -1,0 +1,72 @@
+{
+  "name": "lesarge-music-ai-desktop",
+  "productName": "Lesarge Music AI",
+  "version": "1.1.0",
+  "description": "Lesarge Music AI - AI music generation desktop app",
+  "main": "electron/main.js",
+  "author": "Lesarge",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File build-desktop.ps1 -Build",
+    "dist": "powershell -NoProfile -ExecutionPolicy Bypass -File build-desktop.ps1 -Dist",
+    "pack": "electron-builder --dir"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "ch.lesarge.music.ai",
+    "productName": "Lesarge Music AI",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Lesarge-Music-AI-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://lesarge.ch/music-updates"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lesarge Music AI"
+    }
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}

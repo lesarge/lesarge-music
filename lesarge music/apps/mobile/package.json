@@ -1,0 +1,18 @@
+{
+  "name": "lesarge-music-ai-mobile",
+  "version": "1.0.0",
+  "description": "Lesarge Music AI - Android client for the local AI music server",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync android",
+    "build:apk": "cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

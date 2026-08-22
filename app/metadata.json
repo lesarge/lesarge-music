@@ -1,0 +1,6 @@
+{
+  "name": "Lesarge Music AI",
+  "description": "Lesarge Music AI - Professional AI Music & Video Creation Platform with Automatic Routing (Qwen, ACE-Step 1.5, Wan 2.2), Studio Controls, Genres, Instruments, Preferences & Admin Studio (music.lesarge.ch)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

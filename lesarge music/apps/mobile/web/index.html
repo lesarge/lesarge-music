@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>Lesarge Music AI</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: #09090b; color: #e4e4e7;
+      font-family: -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 18px; text-align: center; }
+    .logo {
+      width: 88px; height: 88px; border-radius: 24px;
+      background: linear-gradient(135deg, #f472b6, #a78bfa, #60a5fa);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px; font-weight: 800; color: #09090b;
+    }
+    h1 { margin: 0; font-size: 22px; }
+    .sub { margin: 0; font-size: 14px; color: #a1a1aa; }
+    .field {
+      width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px;
+    }
+    input {
+      width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid #27272a;
+      background: #18181b; color: #e4e4e7; font-size: 15px; outline: none;
+    }
+    input:focus { border-color: #a78bfa; }
+    button {
+      width: 100%; padding: 14px 16px; border-radius: 12px; border: none;
+      background: linear-gradient(135deg, #f472b6, #a78bfa, #60a5fa);
+      color: #09090b; font-size: 15px; font-weight: 700; cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; }
+    .status { font-size: 13px; color: #a1a1aa; min-height: 18px; }
+    .status.err { color: #f87171; }
+    .hint { font-size: 12px; color: #71717a; max-width: 340px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">L</div>
+    <h1>Lesarge Music AI</h1>
+    <p class="sub">Connect to your AI music server on your computer.</p>
+    <div class="field">
+      <input id="url" type="url" inputmode="url" autocomplete="url"
+             placeholder="http://192.168.1.100:3001" />
+      <button id="connect">Connect</button>
+      <div id="status" class="status"></div>
+    </div>
+    <p class="hint">
+      Start the Lesarge Music AI app on your PC (the window shows your LAN address,
+      e.g. http://192.168.1.100:3001). Enter it above while your phone is on the same Wi-Fi.
+    </p>
+  </div>
+
+  <script>
+    const KEY = 'lesargeServerUrl';
+    const input = document.getElementById('url');
+    const btn = document.getElementById('connect');
+    const status = document.getElementById('status');
+
+    function setStatus(msg, isErr) {
+      status.textContent = msg || '';
+      status.className = 'status' + (isErr ? ' err' : '');
+    }
+
+    function normalize(u) {
+      u = (u || '').trim().replace(/\/+$/, '');
+      if (!/^https?:\/\//i.test(u)) u = 'http://' + u;
+      return u;
+    }
+
+    async function check(url) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        const r = await fetch(url + '/health', { signal: ctrl.signal });
+        return r.ok;
+      } catch {
+        return false;
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    async function connect(saved) {
+      const url = normalize(input.value || saved);
+      if (!url) { setStatus('Enter your server address.', true); return; }
+      btn.disabled = true;
+      setStatus('Connecting…');
+      if (await check(url)) {
+        localStorage.setItem(KEY, url);
+        setStatus('Connected! Loading…');
+        location.href = url + '/?mobile=1';
+      } else {
+        btn.disabled = false;
+        setStatus('Could not reach that address. Is the PC app running?', true);
+      }
+    }
+
+    (async function init() {
+      const saved = localStorage.getItem(KEY);
+      if (saved) {
+        input.value = saved;
+        await connect(saved);
+      }
+    })();
+
+    btn.addEventListener('click', () => connect());
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+  </script>
+</body>
+</html>
