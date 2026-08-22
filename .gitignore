@@ -6,10 +6,10 @@ build/
 *.exe
 *.apk
 *.blockmap
-checkpoints/
-models/
-outputs/
-logs/
+/checkpoints/
+/models/
+/outputs/
+/logs/
 *.log
 .venv/
 venv/
