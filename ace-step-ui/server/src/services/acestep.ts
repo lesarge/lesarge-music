@@ -510,7 +510,7 @@ function buildReleaseTaskBody(params: GenerationParams): Record<string, unknown>
   };
 
   if (params.ditModel) body.model = params.ditModel;
-  if (params.duration && params.duration > 0) body.audio_duration = params.duration;
+  body.audio_duration = Math.min(Math.max(params.duration ?? 15, 5), 15);
   if (params.bpm && params.bpm > 0) body.bpm = params.bpm;
   if (params.keyScale) body.key_scale = params.keyScale;
   if (params.timeSignature) body.time_signature = params.timeSignature;
