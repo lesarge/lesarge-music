@@ -29,3 +29,4 @@ ace-step-ui/server/public/uploads/
 *.db
 *.db-shm
 *.db-wal
+.git_disabled/
