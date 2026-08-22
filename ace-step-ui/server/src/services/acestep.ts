@@ -462,6 +462,235 @@ export function resetClient(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Native HTTP API generation (/release_task + /query_result on acestep-api)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if the ACE-Step REST engine is reachable via its /health endpoint.
+ */
+async function isEngineApiAvailable(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(`${ACESTEP_API}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Map UI generation params to a /release_task JSON body.
+ * LM/CoT features are only enabled when explicitly requested (thinking/enhance)
+ * so CPU deployments don't trigger surprise LM initialization.
+ */
+function buildReleaseTaskBody(params: GenerationParams): Record<string, unknown> {
+  const caption = params.customMode
+    ? (params.style || 'pop music')
+    : (params.songDescription || params.style || 'pop music');
+  const lyrics = params.instrumental ? '' : (params.lyrics || '');
+  const useLm = Boolean(params.thinking || params.enhance);
+  const taskType = params.taskType === 'audio2audio' ? 'cover' : (params.taskType || 'text2music');
+
+  const body: Record<string, unknown> = {
+    prompt: caption,
+    lyrics,
+    vocal_language: params.vocalLanguage || 'en',
+    audio_format: params.audioFormat || 'mp3',
+    task_type: taskType,
+    thinking: useLm,
+    use_cot_caption: useLm ? (params.useCotCaption ?? true) : false,
+    use_cot_language: useLm ? (params.useCotLanguage ?? true) : false,
+    batch_size: Math.min(Math.max(params.batchSize ?? 1, 1), 4),
+    inference_steps: params.inferenceSteps ?? 8,
+    guidance_scale: params.guidanceScale ?? 7.0,
+    infer_method: params.inferMethod || 'ode',
+    shift: params.shift ?? 3.0,
+  };
+
+  if (params.ditModel) body.model = params.ditModel;
+  if (params.duration && params.duration > 0) body.audio_duration = params.duration;
+  if (params.bpm && params.bpm > 0) body.bpm = params.bpm;
+  if (params.keyScale) body.key_scale = params.keyScale;
+  if (params.timeSignature) body.time_signature = params.timeSignature;
+  if (!params.randomSeed && params.seed !== undefined && params.seed >= 0) {
+    body.use_random_seed = false;
+    body.seed = params.seed;
+  }
+
+  return body;
+}
+
+interface EngineTaskEntry {
+  status: number;
+  result?: string;
+  error?: string | null;
+}
+
+/**
+ * Submit a generation task to the engine and return its task_id.
+ */
+async function submitEngineTask(body: Record<string, unknown>): Promise<string> {
+  const res = await fetch(`${ACESTEP_API}/release_task`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  const payload = await res.json().catch(() => null) as any;
+  if (!res.ok || !payload || payload.code !== 200) {
+    const msg = payload?.error || payload?.detail || `HTTP ${res.status}`;
+    throw new Error(`release_task failed: ${msg}`);
+  }
+
+  const taskId = payload?.data?.task_id;
+  if (!taskId) {
+    throw new Error('release_task returned no task_id');
+  }
+  return taskId as string;
+}
+
+/**
+ * Query one engine task. Returns null when the task is unknown to the engine.
+ */
+async function queryEngineTask(taskId: string): Promise<EngineTaskEntry | null> {
+  const res = await fetch(`${ACESTEP_API}/query_result`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_id_list: [taskId] }),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  const payload = await res.json().catch(() => null) as any;
+  if (!res.ok || !payload || payload.code !== 200) {
+    throw new Error(`query_result failed: ${payload?.error || payload?.detail || `HTTP ${res.status}`}`);
+  }
+
+  const entries = payload?.data;
+  return Array.isArray(entries) && entries.length > 0 ? entries[0] : null;
+}
+
+/**
+ * Download one generated audio file from the engine into local storage.
+ */
+async function downloadEngineAudioFile(fileUrl: string, destPath: string): Promise<void> {
+  const url = fileUrl.startsWith('http') ? fileUrl : `${ACESTEP_API}${fileUrl}`;
+  const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+  if (!response.ok) {
+    throw new Error(`Failed to download generated audio (${url}): ${response.status}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length === 0) {
+    throw new Error(`Downloaded audio file is empty (${url})`);
+  }
+
+  await mkdir(path.dirname(destPath), { recursive: true });
+  const tmpPath = `${destPath}.tmp`;
+  await writeFile(tmpPath, buffer);
+  await rename(tmpPath, destPath);
+}
+
+/**
+ * Generate audio through the engine's async REST API:
+ * submit via /release_task, poll /query_result, then download result files.
+ */
+async function processGenerationViaHttpApi(
+  jobId: string,
+  params: GenerationParams,
+  job: ActiveJob,
+): Promise<void> {
+  const body = buildReleaseTaskBody(params);
+
+  console.log(`Job ${jobId}: Submitting to engine API ${ACESTEP_API}/release_task`, {
+    model: body.model,
+    duration: body.audio_duration,
+    steps: body.inference_steps,
+    batchSize: body.batch_size,
+  });
+
+  job.stage = 'Submitting generation task...';
+  const engineTaskId = await submitEngineTask(body);
+  console.log(`Job ${jobId}: Engine task accepted (task_id=${engineTaskId})`);
+
+  // Poll until status is 1 (succeeded) or 2 (failed)
+  const pollIntervalMs = 3000;
+  const deadline = Date.now() + GENERATE_TIMEOUT_MS;
+  let entry: EngineTaskEntry | null = null;
+
+  while (Date.now() < deadline) {
+    entry = await queryEngineTask(engineTaskId);
+    if (entry && (entry.status === 1 || entry.status === 2)) break;
+
+    if (!job.stage || job.stage.startsWith('Generating')) {
+      job.stage = `Generating music (engine task ${engineTaskId.slice(0, 8)})...`;
+    } else {
+      job.stage = 'Generating music (engine loading models)...';
+    }
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+  }
+
+  if (!entry) {
+    throw new Error(`Engine task ${engineTaskId} not found`);
+  }
+  if (entry.status === 2) {
+    throw new Error(entry.error || `Engine task ${engineTaskId} failed`);
+  }
+  if (entry.status !== 1 || !entry.result) {
+    throw new Error(`Engine task ${engineTaskId} timed out after ${GENERATE_TIMEOUT_MS / 1000}s`);
+  }
+
+  // Parse result entries: [{file: "/v1/audio?path=...", metas: {...}, ...}]
+  let results: Array<{ file?: string; metas?: Record<string, unknown> }> = [];
+  try {
+    const parsed = JSON.parse(entry.result);
+    if (Array.isArray(parsed)) results = parsed;
+  } catch {
+    throw new Error(`Engine task ${engineTaskId} returned unparseable result`);
+  }
+
+  const audioFiles = results.filter((r) => r.file && /\.(mp3|flac|wav|ogg|m4a)(\?|$)/i.test(r.file));
+  if (audioFiles.length === 0) {
+    throw new Error(`Engine task ${engineTaskId} produced no audio files`);
+  }
+
+  const audioUrls: string[] = [];
+  let actualDuration = 0;
+  for (const item of audioFiles) {
+    const extMatch = item.file!.match(/\.(mp3|flac|wav|ogg|m4a)/i);
+    const ext = extMatch ? extMatch[0] : '.mp3';
+    const filename = `${jobId}_${audioUrls.length}${ext}`;
+    const destPath = path.join(AUDIO_DIR, filename);
+
+    await downloadEngineAudioFile(item.file!, destPath);
+
+    if (audioUrls.length === 0) {
+      actualDuration = getAudioDuration(destPath);
+    }
+    audioUrls.push(`/audio/${filename}`);
+  }
+
+  const metaDuration = Number(audioFiles[0]?.metas?.duration) || 0;
+  const finalDuration = actualDuration > 0
+    ? actualDuration
+    : (metaDuration > 0 ? metaDuration : (params.duration || 0));
+
+  job.status = 'succeeded';
+  job.result = {
+    audioUrls,
+    duration: finalDuration,
+    bpm: params.bpm,
+    keyScale: params.keyScale,
+    timeSignature: params.timeSignature,
+    status: 'succeeded',
+  };
+  job.rawResponse = entry.result;
+  console.log(`Job ${jobId}: Completed via engine API with ${audioUrls.length} audio files`);
+}
+
+// ---------------------------------------------------------------------------
 // Job queue
 // ---------------------------------------------------------------------------
 
@@ -542,6 +771,18 @@ async function processGeneration(
     params.ditModel = await pickWorkingModel();
     console.log(`Job ${jobId}: auto-selected model '${params.ditModel}'`);
   }
+
+  // Preferred path: engine's native async REST API (acestep-api)
+  const engineApiUp = await isEngineApiAvailable();
+  if (engineApiUp) {
+    try {
+      await processGenerationViaHttpApi(jobId, params, job);
+      return;
+    } catch (error) {
+      console.error(`Job ${jobId}: Engine API generation failed, trying Gradio fallback`, error);
+    }
+  }
+
   try {
     job.stage = `Loading model ${params.ditModel}...`;
     await switchModelIfNeeded(params.ditModel);
