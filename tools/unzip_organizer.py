@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-unzip_organizer.py — Unzip a file and auto-organize contents into:
-    tables/    → .csv .xlsx .xls .tsv .parquet .json .sql .db .sqlite
-    charts/    → .svg .pdf .pptx .ppt .pptm .xml (when chart data)
-    images/    → .jpg .jpeg .png .gif .bmp .webp .tiff .tif .ico .heic .heif
-    banners/   → images with wide aspect ratio (≥2:1) OR filenames containing "banner"
-    audio/     → .mp3 .wav .flac .ogg .m4a .aac .wma
-    video/     → .mp4 .avi .mov .mkv .webm .wmv .flv
-    documents/ → .pdf .doc .docx .txt .md .rtf .odt .epub
-    code/      → .py .js .ts .jsx .tsx .html .css .java .c .cpp .go .rs .rb .php
-    archives/  → .zip .rar .7z .tar .gz .bz2 .xz
-    fonts/     → .ttf .otf .woff .woff2 .eot
-    other/     → everything else
+unzip_organizer.py -- Unzip a file and auto-organize contents into:
+    tables/    -> .csv .xlsx .xls .tsv .parquet .json .sql .db .sqlite
+    charts/    -> .svg .pdf .pptx .ppt .pptm .xml (when chart data)
+    images/    -> .jpg .jpeg .png .gif .bmp .webp .tiff .tif .ico .heic .heif
+    banners/   -> images with wide aspect ratio (≥2:1) OR filenames containing "banner"
+    audio/     -> .mp3 .wav .flac .ogg .m4a .aac .wma
+    video/     -> .mp4 .avi .mov .mkv .webm .wmv .flv
+    documents/ -> .pdf .doc .docx .txt .md .rtf .odt .epub
+    code/      -> .py .js .ts .jsx .tsx .html .css .java .c .cpp .go .rs .rb .php
+    archives/  -> .zip .rar .7z .tar .gz .bz2 .xz
+    fonts/     -> .ttf .otf .woff .woff2 .eot
+    other/     -> everything else
 
 Usage:
     python unzip_organizer.py <zipfile.zip> [--output <dir>] [--clean] [--dry-run]
@@ -29,7 +29,7 @@ import zipfile
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Classification rules — extension → category
+# Classification rules -- extension -> category
 # ---------------------------------------------------------------------------
 TABLE_EXTS   = {'.csv', '.xlsx', '.xls', '.tsv', '.parquet', '.sql', '.db',
                 '.sqlite', '.sqlite3', '.ods', '.numbers'}
@@ -120,7 +120,7 @@ def organize(zip_path: str, output_dir: str | None = None,
     dest_root.mkdir(parents=True, exist_ok=True)
 
     print(f"{'[DRY RUN] ' if dry_run else ''}Extracting {zip_path.name}")
-    print(f"  → {dest_root}\n")
+    print(f"  >> {dest_root}\n")
 
     # Create category subdirs
     categories = [c for c, _ in CATEGORY_PRIORITY] + ['banners', 'other']
@@ -182,20 +182,20 @@ def organize(zip_path: str, output_dir: str | None = None,
 
     # Summary
     total = sum(stats.values())
-    print(f"\n{'─' * 50}")
+    print(f"\n{'=' * 50}")
     print(f"  Total files:  {total}")
     print(f"  Skipped dirs: {skipped_dirs}")
-    print(f"{'─' * 50}")
+    print(f"{'=' * 50}")
     for cat, count in sorted(stats.items(), key=lambda x: -x[1]):
         if count > 0:
             print(f"  {cat:12}  {count:>5} files")
-    print(f"{'─' * 50}")
+    print(f"{'=' * 50}")
 
     if clean and not dry_run:
         zip_path.unlink()
         print(f"\n  Deleted {zip_path.name}")
 
-    print(f"\nDone → {dest_root}")
+    print(f"\nDone -> {dest_root}")
     return stats
 
 # ---------------------------------------------------------------------------
